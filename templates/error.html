@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Error... - {{ .Info.Pages.Title }}</title>
+        <link
+            href="https://fonts.googleapis.com/icon?family=Material+Icons"
+            rel="stylesheet"
+        />
+        <meta name="author" content="{{ .Info.Pages.Title }}" />
+        <meta
+            name="description"
+            content="{{ .Info.Pages.Title }} is a simple Pages server for Gitea"
+        />
+        <meta name="keywords" content="go,git,self-hosted,gitea" />
+        <meta name="referrer" content="no-referrer" />
+        <link
+            rel="icon"
+            href="{{ .Info.Gitea.URL }}/assets/img/favicon.svg"
+            type="image/svg+xml"
+        />
+        <link
+            rel="alternate icon"
+            href="{{ .Info.Gitea.URL }}/assets/img/favicon.png"
+            type="image/png"
+        />
+        <link
+            rel="stylesheet"
+            type="text/css"
+            href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.5/css/materialize.min.css"
+        />
+        <script src="https://cdn.jsdelivr.net/npm/darkmode-js@1.5.7/lib/darkmode-js.min.js"></script>
+        <meta http-equiv="refresh" content="5" />
+        <script>
+            function addDarkmodeWidget() {
+                new Darkmode({ label: "🌓" }).showWidget();
+            }
+            window.addEventListener("load", addDarkmodeWidget);
+        </script>
+        <style type="text/css">
+            html {
+                margin: 0px;
+                height: 100%;
+                width: 100%;
+            }
+
+            body {
+                margin: 0px;
+                min-height: 100%;
+                width: 100%;
+            }
+        </style>
+    </head>
+
+    <body>
+        <!-- <div class="container"> -->
+
+        <center>
+            <div class="valign-wrapper" style="height: 100vh">
+                <div class="row">
+                    <div class="col s12">
+                        <h1 class="header center-align blue-text text-darken-3">
+                            {{ .Info.Pages.Title }}
+                        </h1>
+                        <h3 class="header center-align blue-text text-darken-1">
+                            The repository is misconfigured
+                        </h3>
+                        <p>{{ .Error }}</p>
+                    </div>
+                    <div class="col s12">
+                        <div class="progress">
+                            <div class="indeterminate"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </center>
+        <!-- </div> -->
+    </body>
+</html>

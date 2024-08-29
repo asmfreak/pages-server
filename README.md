@@ -4,7 +4,10 @@
 
 `pages-server` is a simple server that serves pages from Gitea repositories.
 
-It expects that for every repository there is corresponding Gitea package with a zipped pages site.
+It works in three modes:
+1. Repository with `pages-branch` topic should have `gh-pages` or `gh-pages-VERSION` branched, where `VERSION` is a version of the docs
+2. Repository with `pages-release` topic should have release with `docs.zip` attachment with a zipped pages site.
+3. Repository with `pages-packages` topic should have corresponding Gitea package with a zipped pages site with `docs.zip` name.
 E.g. for `gitea.com/owner/repo` there should be a generic package repository `repo` in `gitea.com/owner` with a file called `docs.zip` containing the site.
 
 This server will **not** build any content on its own. It will only serve existing code.
@@ -17,9 +20,6 @@ This server will **not** build any content on its own. It will only serve existi
 1. If the user has access to the repository, `pages-server` fetches the latest version of the repository using `GITEA_ADMIN_TOKEN` and caches it in the bbolt database.
 1. `pages-server` serves the pages from the bbolt database.
 
-### Updates
-
-To update contents of a repo send a `POST` request to `/_update/owner/repo`.
 
 ## Usage
 

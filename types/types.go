@@ -1,5 +1,7 @@
 package types
 
+//go:generate go-enum --marshal --names --values
+
 import (
 	"crypto/sha256"
 	"fmt"
@@ -54,6 +56,8 @@ func (p PagesSHA256) String() string {
 	return string(p)
 }
 
+type AttachmentUUID string
+
 type (
 	Pages    []PageFile
 	PageFile struct {
@@ -63,9 +67,10 @@ type (
 )
 
 type Version struct {
-	Version   string      `json:"name"`
-	CreatedAt time.Time   `json:"created_at"`
-	SHA       PagesSHA256 `json:"sha"`
+	Version   string         `json:"name"`
+	CreatedAt time.Time      `json:"created_at"`
+	SHA       PagesSHA256    `json:"sha"`
+	Extra     map[string]any `json:"extra,omitempty"`
 }
 
 type Repo struct {
@@ -73,7 +78,10 @@ type Repo struct {
 	Repo  string `json:"repo"`
 }
 
-func (r *Repo) String() string {
+// ENUM(branch,release,package)
+type RepoType int
+
+func (r Repo) String() string {
 	return fmt.Sprintf("%s/%s", r.Owner, r.Repo)
 }
 
@@ -92,7 +100,7 @@ type RepoInfo struct {
 	Versions []Version `json:"versions"`
 }
 
-type RepoVersion struct {
+type RepoFileAtVersion struct {
 	Repo    Repo   `json:"repo"`
 	Version string `in:"query=version"`
 	File    string `in:"path=*"`

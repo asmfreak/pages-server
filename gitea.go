@@ -20,6 +20,9 @@ func allGiteaPages[T any](ctx context.Context, content func(ctx context.Context,
 			return
 		}
 		ret = append(ret, pageData...)
+		if rsp == nil {
+			return
+		}
 		if page >= rsp.LastPage {
 			pagesDone = true
 		}

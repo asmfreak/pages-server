@@ -2,9 +2,8 @@ package main
 
 import (
 	"context"
-	_ "embed"
+	"errors"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"mime"
 	"net"
@@ -19,6 +18,7 @@ import (
 	"github.com/ASMfreaK/pages-server/pages-server/ccli"
 	"github.com/ASMfreaK/pages-server/pages-server/consts"
 	"github.com/ASMfreaK/pages-server/pages-server/database"
+	"github.com/ASMfreaK/pages-server/pages-server/templates"
 	"github.com/ASMfreaK/pages-server/pages-server/types"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -113,7 +113,12 @@ func (a *app) Action(ctx *cli.Context) error {
 	}
 
 	slog.Info("Initializing queue")
-	q, err := database.NewQueue(ctx.Context, fetchRepo(c, db), fetchVersion(a.Gitea, db))
+	q, err := database.NewQueue(
+		ctx.Context,
+		fetchRepoFromPackages(c, db), fetchVersionFromPackages(a.Gitea, db),
+		fetchRepoFromReleases(c, db), fetchVersionFromReleases(c, a.Gitea, db),
+		fetchRepoFromBranches(c, db), fetchVersionFromBranches(c, db),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create queue %w", err)
 	}
@@ -126,6 +131,7 @@ func (a *app) Action(ctx *cli.Context) error {
 
 	authdClient := authenticatedGiteaClient(a.Gitea.URL, a.Auth.State.oauthConfig, db, GiteaPagesInfo{a.Gitea, a.Pages})
 	r.With(
+		middleware.NoCache,
 		a.Auth.State.oauthStateVerrifier,
 		tokenAuthenticator(GiteaPagesInfo{a.Gitea, a.Pages}),
 		db.UserSessionFromToken, db.UserFromUserSession,
@@ -134,11 +140,17 @@ func (a *app) Action(ctx *cli.Context) error {
 		indexPage(GiteaPagesInfo{a.Gitea, a.Pages}, w)
 	})
 
+	r.Get(templates.IndexJSFileName(), func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Add("ContentType", mime.TypeByExtension(".js"))
+		w.Header().Add("Cache-Control", "max-age: 31536000, immutable")
+		_, _ = w.Write(templates.IndexJS)
+	})
+
 	r.Route(consts.HookPath, func(r chi.Router) {
 		r.Post("/{owner:^[^_].*}/{repo:^[^_].*}", func(w http.ResponseWriter, r *http.Request) {
 			owner := chi.URLParam(r, "owner")
 			repoName := chi.URLParam(r, "repo")
-			err := q.Enqueue(r.Context(), &FetchRepo{
+			err := q.Enqueue(r.Context(), &FetchRepoFromPackages{
 				Owner: owner,
 				Repo:  repoName,
 			})
@@ -207,7 +219,7 @@ func (a *app) Action(ctx *cli.Context) error {
 
 	// })
 
-	r.Route("/_auth", a.Auth.State.routes)
+	r.With(middleware.NoCache).Route("/_auth", a.Auth.State.routes)
 
 	r.Get("/{owner:^[^_].*}/{repo:^[^_].*}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, r.URL.Path+"/", http.StatusTemporaryRedirect)
@@ -229,14 +241,61 @@ func (a *app) Action(ctx *cli.Context) error {
 			loginRequired(GiteaPagesInfo{a.Gitea, a.Pages}, w, r)
 			return
 		}
+		repotypes, err := allGiteaPages(r.Context(), func(_ context.Context, opts gitea.ListOptions) ([]types.RepoType, *gitea.Response, error) {
+			topics, rsp, lterr := client.ListRepoTopics(owner, repoName, gitea.ListRepoTopicsOptions{ListOptions: opts})
+			if lterr != nil {
+				return nil, nil, lterr
+			}
+			var ret []types.RepoType
+			for _, topic := range topics {
+				name := strings.TrimPrefix(topic, consts.PagesLabelPrefix)
+				if name == topic { // did not have prefix
+					slog.Info("topic does not contain", "label", topic, "prefix", consts.PagesLabelPrefix)
+					continue
+				}
+				var rt types.RepoType
+				rt, lterr = types.ParseRepoType(name)
+				if lterr != nil {
+					slog.Error("Failed to parse pages- topic part", "part", name)
+					continue
+				}
+				ret = append(ret, rt)
+			}
+			return ret, rsp, lterr
+		})
+		if err != nil {
+			slog.Error("failed to get repo type", "err", err)
+			errorPage(GiteaPagesInfo{a.Gitea, a.Pages}, err, w)
+			return
+		}
+		if len(repotypes) != 1 {
+			b := strings.Builder{}
+			if len(repotypes) == 0 {
+				b.WriteString("No suitable topics on this repo")
+			} else {
+				b.WriteString("Too many topics ")
+			}
+			b.WriteString(", expected one of topics: ")
+			for i, v := range types.RepoTypeNames() {
+				if i != 0 {
+					b.WriteString(", ")
+				}
+				b.WriteString(consts.PagesLabelPrefix)
+				b.WriteString(v)
+			}
+			err = errors.New(b.String())
+			slog.Error("failed to find repo type", "err", err)
+			errorPage(GiteaPagesInfo{a.Gitea, a.Pages}, err, w)
+			return
+		}
 
 		// client has access to the repo, let's check if we have the page
 		// input := r.Context().Value(httpin.Input).(*types.RepoVersion)
-		data, fetched, err := requestPageData(&types.RepoVersion{
+		data, fetched, err := requestPageData(&types.RepoFileAtVersion{
 			Repo:    types.Repo{Owner: owner, Repo: repoName},
 			File:    path,
 			Version: "",
-		}, db, q)
+		}, repotypes[0], db, q)
 		if err != nil {
 			slog.Error("failed to get page data", "err", err)
 			loginRequired(GiteaPagesInfo{a.Gitea, a.Pages}, w, r)
@@ -260,12 +319,8 @@ func (a *app) Action(ctx *cli.Context) error {
 	return server.ListenAndServe()
 }
 
-//go:embed index.html
-var index string
-var indexTemplate = template.Must(template.New("index").Parse(index))
-
 func indexPage(gi GiteaPagesInfo, w http.ResponseWriter) {
-	if err := indexTemplate.Execute(w, struct {
+	if err := templates.Index.Execute(w, struct {
 		Info     GiteaPagesInfo
 		Redirect string
 	}{
@@ -277,13 +332,9 @@ func indexPage(gi GiteaPagesInfo, w http.ResponseWriter) {
 	}
 }
 
-//go:embed login.html
-var login string
-var loginTemplate = template.Must(template.New("login").Parse(login))
-
 func loginRequired(gi GiteaPagesInfo, w http.ResponseWriter, r *http.Request) {
 	reqPath := r.URL.Path
-	if err := loginTemplate.Execute(w, struct {
+	if err := templates.Login.Execute(w, struct {
 		Info     GiteaPagesInfo
 		Redirect string
 	}{
@@ -296,17 +347,27 @@ func loginRequired(gi GiteaPagesInfo, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//go:embed preparation.html
-var preparation string
-var preparationTemplate = template.Must(template.New("preparation").Parse(preparation))
-
 func preparationPage(gi GiteaPagesInfo, w http.ResponseWriter) {
-	if err := preparationTemplate.Execute(w, struct {
+	if err := templates.Preparation.Execute(w, struct {
 		Info GiteaPagesInfo
 	}{
 		Info: gi,
 	}); err != nil {
 		slog.Error("failed to execute preparation template", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func errorPage(gi GiteaPagesInfo, errIn error, w http.ResponseWriter) {
+	if err := templates.Error.Execute(w, struct {
+		Info  GiteaPagesInfo
+		Error string
+	}{
+		Info:  gi,
+		Error: errIn.Error(),
+	}); err != nil {
+		slog.Error("failed to execute error template", "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{{ .Info.Pages.Title }}</title>
+        <script src="{{ IndexJSFileName }}"></script>
+        <meta name="author" content="{{ .Info.Pages.Title }}" />
+        <meta
+            name="description"
+            content="{{ .Info.Pages.Title }} is a simple Pages server for Gitea"
+        />
+        <meta name="keywords" content="go,git,self-hosted,gitea" />
+        <meta name="referrer" content="no-referrer" />
+        <link
+            rel="icon"
+            href="{{ .Info.Gitea.URL }}/assets/img/favicon.svg"
+            type="image/svg+xml"
+        />
+        <link
+            rel="alternate icon"
+            href="{{ .Info.Gitea.URL }}/assets/img/favicon.png"
+            type="image/png"
+        />
+        <script>
+            function addDarkmodeWidget() {
+                new Darkmode({ label: "🌓" }).showWidget();
+            }
+            window.addEventListener("load", addDarkmodeWidget);
+        </script>
+        <style type="text/css">
+            html {
+                margin: 0px;
+                height: 100%;
+                width: 100%;
+            }
+
+            body {
+                margin: 0px;
+                min-height: 100%;
+                width: 100%;
+            }
+        </style>
+    </head>
+
+    <body>
+        <!-- <div class="container"> -->
+
+        <center>
+            <div class="valign-wrapper" style="height: 100vh">
+                <div class="row">
+                    <div class="col s12">
+                        <h1 class="header center-align blue-text text-darken-3">
+                            Welcome to {{ .Info.Pages.Title }}
+                        </h1>
+                        <h3 class="header center-align blue-text text-darken-1">
+                            Here you can log out
+                        </h3>
+                        <!-- and register webhook</h3> -->
+                    </div>
+                    <!-- <div class="col s12">
+                <a class="btn btn-large  red white-text" href="/_register_webhook" style="text-transform:none">
+                    <i class="large material-icons">input</i>
+                    Register webhook
+                </a>
+            </div> -->
+                    <div class="col s12">
+                        <a
+                            class="btn btn-large red white-text"
+                            href="/_auth/logout"
+                            style="text-transform: none"
+                        >
+                            <i class="large material-icons">first_page</i>
+                            Log out
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </center>
+        <!-- </div> -->
+    </body>
+</html>

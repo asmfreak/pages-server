@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,7 +12,7 @@ import (
 
 var ErrFileNotFound = errors.New("file not found")
 
-func requestPageData(r *types.RepoVersion, db *database.Database, q *database.Queue) (data []byte, fetched bool, err error) {
+func requestPageData(r *types.RepoFileAtVersion, rt types.RepoType, db *database.Database, q *database.Queue) (data []byte, fetched bool, err error) {
 	slog.Info("requesting page data", "repo", r)
 	repoInfo, ok, err := db.RepoPages().Get(r.Repo)
 	if err != nil {
@@ -21,8 +20,7 @@ func requestPageData(r *types.RepoVersion, db *database.Database, q *database.Qu
 		return nil, false, err
 	}
 	if !ok {
-		fr := FetchRepo(r.Repo)
-		err = q.Enqueue(context.Background(), &fr)
+		err = fetchRepo(r.Repo, rt, q)
 		if err != nil {
 			slog.Error("failed to enqueue fetch repo", "err", err)
 		}
@@ -52,7 +50,7 @@ func requestPageData(r *types.RepoVersion, db *database.Database, q *database.Qu
 		return nil, false, err
 	}
 	if !ok {
-		err = q.Enqueue(context.Background(), &FetchVersion{r.Repo, version})
+		err = fetchVersion(r.Repo, version, rt, q)
 		return nil, false, err
 	}
 

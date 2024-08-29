@@ -6,31 +6,33 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"code.gitea.io/sdk/gitea"
+	"github.com/ASMfreaK/pages-server/pages-server/consts"
 	"github.com/ASMfreaK/pages-server/pages-server/database"
 	"github.com/ASMfreaK/pages-server/pages-server/types"
 )
 
-type FetchRepo types.Repo
+type FetchRepoFromBranches types.Repo
 
 // QueueName implements database.TaskElement.
-func (f *FetchRepo) QueueName() string {
-	return "fetchRepo"
+func (f *FetchRepoFromBranches) QueueName() string {
+	return "fetchRepoFromBranch"
 }
 
 // DedupingKey implements database.TaskElement.
-func (f *FetchRepo) DedupingKey() string {
+func (f *FetchRepoFromBranches) DedupingKey() string {
 	return fmt.Sprintf("fetch[%s]", (*types.Repo)(f).String())
 }
 
 // Job implements database.TaskElement.
-func (f *FetchRepo) Job() string {
+func (f *FetchRepoFromBranches) Job() string {
 	return (*types.Repo)(f).String()
 }
 
 // ParseJob implements database.TaskElement.
-func (f *FetchRepo) ParseJob(s string) error {
+func (f *FetchRepoFromBranches) ParseJob(s string) error {
 	var ok bool
 	f.Owner, f.Repo, ok = strings.Cut(s, "/")
 	if !ok {
@@ -39,54 +41,38 @@ func (f *FetchRepo) ParseJob(s string) error {
 	return nil
 }
 
-var _ database.TaskElement = (*FetchRepo)(nil)
+var _ database.TaskElement = (*FetchRepoFromBranches)(nil)
 
-func fetchRepo(c *gitea.Client, db *database.Database) database.Task {
-	return database.FuncTask(func(ctx context.Context, task *FetchRepo) error {
-		slog.Info("fetching repo", slog.String("owner", task.Owner), slog.String("repo", task.Repo))
+func fetchRepoFromBranches(c *gitea.Client, db *database.Database) database.Task {
+	return database.FuncTask(func(ctx context.Context, task *FetchRepoFromBranches) error {
+		slog.Info("fetching repo from branches", slog.String("owner", task.Owner), slog.String("repo", task.Repo))
 		repoInfo := types.RepoInfo{
 			Repo: types.Repo(*task),
 		}
 		versions, err := allGiteaPages(ctx, func(_ context.Context, opts gitea.ListOptions) ([]types.Version, *gitea.Response, error) {
-			packages, resp, err := c.ListPackages(task.Owner, gitea.ListPackagesOptions{
+			branches, resp, err := c.ListRepoBranches(task.Owner, task.Repo, gitea.ListRepoBranchesOptions{
 				ListOptions: opts,
 			})
 			if err != nil {
-				err = fmt.Errorf("failed to list packages %w", err)
+				err = fmt.Errorf("failed to list branches %w", err)
 				return nil, nil, err
 			}
 			var ret []types.Version
-			for _, pkg := range packages {
-				if pkg.Type != "generic" {
-					continue
+			for _, branch := range branches {
+				version := types.Version{
+					CreatedAt: branch.Commit.Timestamp,
+					SHA:       types.PagesSHA256FromString(branch.Commit.ID),
 				}
-				if pkg.Name != task.Repo {
-					continue
-				}
-				packageFiles, _, err := c.ListPackageFiles(task.Owner, pkg.Type, pkg.Name, pkg.Version)
-				if err != nil {
-					err = fmt.Errorf("failed to list packages files %w", err)
-					return nil, nil, err
-				}
-				var files []*gitea.PackageFile
-				for _, file := range packageFiles {
-					if file.Name != "docs.zip" {
+				if branch.Name == consts.PagesBranch {
+					version.Version = "latest"
+					version.CreatedAt = time.Now()
+				} else {
+					version.Version = strings.TrimPrefix(branch.Name, consts.PagesBranchPrefix)
+					if version.Version == branch.Name {
 						continue
 					}
-					files = append(files, file)
 				}
-				if len(files) == 0 {
-					continue
-				}
-				if len(files) > 1 {
-					slog.Warn("found several docs.zip", slog.String("owner", task.Owner), slog.String("repo", task.Repo), slog.String("version", pkg.Version))
-				}
-				file := files[0]
-				ret = append(ret, types.Version{
-					Version:   pkg.Version,
-					CreatedAt: pkg.CreatedAt,
-					SHA:       types.PagesSHA256FromString(file.SHA256),
-				})
+				ret = append(ret, version)
 			}
 			return ret, resp, nil
 		})
@@ -110,7 +96,7 @@ func fetchRepo(c *gitea.Client, db *database.Database) database.Task {
 		}
 		q := database.QueueFromContext(ctx)
 		for _, v := range repoInfo.Versions {
-			err := q.Enqueue(ctx, &FetchVersion{Repo: types.Repo(*task), Version: v})
+			err := q.Enqueue(ctx, &FetchVersionFromBranches{Repo: types.Repo(*task), Version: v})
 			if err != nil {
 				return err
 			}
