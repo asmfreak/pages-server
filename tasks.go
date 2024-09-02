@@ -10,8 +10,10 @@ import (
 	"github.com/ASMfreaK/pages-server/pages-server/types"
 )
 
-var ErrVersionNotFound = errors.New("version not found")
-var ErrFileNotFound = errors.New("file not found")
+var (
+	ErrVersionNotFound = errors.New("version not found")
+	ErrFileNotFound    = errors.New("file not found")
+)
 
 func requestPageData(r *types.RepoFileAtVersion, rt types.RepoType, db *database.Database, q *database.Queue) (data []byte, fetched bool, err error) {
 	slog.Info("requesting page data", "repo", r)
