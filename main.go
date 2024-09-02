@@ -232,6 +232,7 @@ func (a *app) Action(ctx *cli.Context) error {
 	).Get("/{owner:^[^_].*}/{repo:^[^_].*}/*", func(w http.ResponseWriter, r *http.Request) {
 		owner := chi.URLParam(r, "owner")
 		repoName := chi.URLParam(r, "repo")
+		repoName, repoVersion, _ := strings.Cut(repoName, "@")
 		path := chi.URLParam(r, "*")
 		client := r.Context().Value(clientCtxKey{}).(*gitea.Client)
 		slog.Info("main endpoint hit", "owner", owner, "repo", repoName, "path", path)
@@ -294,11 +295,11 @@ func (a *app) Action(ctx *cli.Context) error {
 		data, fetched, err := requestPageData(&types.RepoFileAtVersion{
 			Repo:    types.Repo{Owner: owner, Repo: repoName},
 			File:    path,
-			Version: "",
+			Version: repoVersion,
 		}, repotypes[0], db, q)
 		if err != nil {
 			slog.Error("failed to get page data", "err", err)
-			loginRequired(GiteaPagesInfo{a.Gitea, a.Pages}, w, r)
+			errorPage(GiteaPagesInfo{a.Gitea, a.Pages}, err, w)
 			return
 		}
 		if !fetched {

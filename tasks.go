@@ -10,6 +10,7 @@ import (
 	"github.com/ASMfreaK/pages-server/pages-server/types"
 )
 
+var ErrVersionNotFound = errors.New("version not found")
 var ErrFileNotFound = errors.New("file not found")
 
 func requestPageData(r *types.RepoFileAtVersion, rt types.RepoType, db *database.Database, q *database.Queue) (data []byte, fetched bool, err error) {
@@ -39,7 +40,7 @@ func requestPageData(r *types.RepoFileAtVersion, rt types.RepoType, db *database
 			}
 		}
 		if !fetched {
-			return nil, false, nil
+			return nil, false, ErrVersionNotFound
 		}
 	}
 	if version.SHA == "" {
